@@ -1,0 +1,15 @@
+# Ignore Gradle project-specific cache directory
+.gradle
+
+# Inore IntelliJ project
+.idea
+
+# Ignore Gradle build output directory
+**/build/
+/log/
+/resources/
+/gradle/
+/lib/
+/agents/
+/build/
+/gradle/
