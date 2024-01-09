@@ -36,9 +36,7 @@ import java.util.regex.Pattern;
 
 public class Utils {
 
-
-    public static Row
-        getMasterRow(Sheet sheet, String prfx, Integer colIx)  {
+    public static Row getMasterRow(Sheet sheet, String prfx, Integer colIx)  {
         for (Row row : sheet) {
             Cell cll1 = row.getCell(colIx);
             if(cll1 == null){continue;}
@@ -52,8 +50,7 @@ public class Utils {
         }
         return null;
     }
-    private static Row
-        copyRow(org.apache.poi.ss.usermodel.Workbook workbook, Sheet worksheet, int sourceRowNum, int destinationRowNum) {
+    private static Row copyRow(org.apache.poi.ss.usermodel.Workbook workbook, Sheet worksheet, int sourceRowNum, int destinationRowNum) {
 
         Row newRow = worksheet.getRow(destinationRowNum);
         Row sourceRow = worksheet.getRow(sourceRowNum);
@@ -125,8 +122,7 @@ public class Utils {
 
         return newRow;
     }
-    public static void
-        loadTableRows(String spth, Integer shtIx, String prfx, Integer colIx, Integer scpy) throws IOException {
+    public static void loadTableRows(String spth, Integer shtIx, String prfx, Integer colIx, Integer scpy) throws IOException {
 
         FileInputStream tist = new FileInputStream(spth);
         XSSFWorkbook twrb = new XSSFWorkbook(tist);
@@ -165,16 +161,14 @@ public class Utils {
         tost.close();
 
     }
-    public static boolean
-        hasDescriptor(IInformationObject infObj, String dscn) throws Exception {
+    public static boolean hasDescriptor(IInformationObject infObj, String dscn) throws Exception {
         IValueDescriptor[] vds = infObj.getDescriptorList();
         for(IValueDescriptor vd : vds){
             if(vd.getName().equals(dscn)){return true;}
         }
         return false;
     }
-    public static String
-        updateCell(String str, JSONObject bookmarks){
+    public static String updateCell(String str, JSONObject bookmarks){
         StringBuffer rtr1 = new StringBuffer();
         String tmp = str + "";
         Pattern ptr1 = Pattern.compile( "\\{([\\w\\.]+)\\}" );
@@ -192,23 +186,7 @@ public class Utils {
 
         return tmp;
     }
-    /*
-    public static String[] getWorkbasketRoles(ISession ses, IWorkbasket wb){
-        List<String> rois = new ArrayList<>();
-        rois.add(ses.getUser().getID())
-        IRole[] sros = ses.getRoles();
-        for(IRole srol : sros){
-            rois.add(srol.getID());
-        }
-
-        IExtSecurityEntries<WorkbasketRight> rgts = wb.isAccessible()
-        for(WorkbasketRight rght : rgts){
-
-        }
-    }
-     */
-    public static String
-        exportDocument(IDocument document, String exportPath, String fileName) throws IOException {
+    public static String exportDocument(IDocument document, String exportPath, String fileName) throws IOException {
         String rtrn ="";
         IDocumentPart partDocument = document.getPartDocument(document.getDefaultRepresentation() , 0);
         String fName = (!fileName.isEmpty() ? fileName : partDocument.getFilename());
@@ -279,10 +257,9 @@ public class Utils {
         if(informationObjects.length < 1) {return null;}
         return informationObjects[0];
     }
-
-
-    static IDocument getTemplateDocument(IInformationObject info, String tpltName) throws Exception {
+    static IDocument getTemplateDocument(IInformationObject info, String tpltName, ISession ses, IDocumentServer srv) throws Exception {
         List<INode> nods = ((IFolder) info).getNodesByName("Templates");
+        IDocument rtrn = null;
         for(INode node : nods){
             IElements elms = node.getElements();
 
@@ -297,27 +274,17 @@ public class Utils {
                 String etpn = tplt.getDescriptorValue(Conf.Descriptors.TemplateName, String.class);
                 if(etpn == null || !etpn.equals(tpltName)){continue;}
 
-                return (IDocument) tplt;
+                rtrn = (IDocument) tplt;
+                break;
             }
+            if(rtrn != null){break;}
         }
-        return null;
+        if(srv != null && ses != null) {
+            rtrn = srv.getDocumentCurrentVersion(ses, rtrn.getID());
+        }
+        return rtrn;
     }
-    static IDocument getTemplateDocument_old(String prjNo, String tpltName, ProcessHelper helper)  {
-        StringBuilder builder = new StringBuilder();
-        builder.append("TYPE = '").append(Conf.ClassIDs.Template).append("'")
-                .append(" AND ")
-                .append(Conf.DescriptorLiterals.PrjCardCode).append(" = '").append(prjNo).append("'")
-                .append(" AND ")
-                .append(Conf.DescriptorLiterals.ObjectNumberExternal).append(" = '").append(tpltName).append("'");
-        String whereClause = builder.toString();
-        System.out.println("Where Clause: " + whereClause);
-
-        IInformationObject[] informationObjects = helper.createQuery(new String[]{Conf.Databases.Company} , whereClause , "",1);
-        if(informationObjects.length < 1) {return null;}
-        return (IDocument) informationObjects[0];
-    }
-    public static String
-        convertExcelToHtml(String excelPath, String htmlPath)  {
+    public static String convertExcelToHtml(String excelPath, String htmlPath)  {
         Workbook workbook = new Workbook();
         workbook.loadFromFile(excelPath);
         Worksheet sheet = workbook.getWorksheets().get(0);
@@ -326,29 +293,21 @@ public class Utils {
         sheet.saveToHtml(htmlPath, options);
         return htmlPath;
     }
-    static String
-        getFileContent (String path) throws Exception {
-        return new String(Files.readAllBytes(Paths.get(path)));
-    }
-    static String
-        getHTMLFileContent (String path) throws Exception {
+    static String getHTMLFileContent (String path) throws Exception {
         String rtrn = new String(Files.readAllBytes(Paths.get(path)));
         rtrn = rtrn.replace("\uFEFF", "");
         rtrn = rtrn.replace("ï»¿", "");
         return rtrn;
     }
-    static IStringMatrix
-        getMailConfigMatrix(ISession ses, IDocumentServer srv, String mtpn) throws Exception {
+    static IStringMatrix getMailConfigMatrix(ISession ses, IDocumentServer srv, String mtpn) throws Exception {
         IStringMatrix rtrn = srv.getStringMatrix("CCM_MAIL_CONFIG", ses);
         if (rtrn == null) throw new Exception("MailConfig Global Value List not found");
         return rtrn;
     }
-    static JSONObject
-        getMailConfig(ISession ses, IDocumentServer srv, String mtpn) throws Exception {
+    static JSONObject getMailConfig(ISession ses, IDocumentServer srv, String mtpn) throws Exception {
         return getMailConfig(ses, srv, mtpn, null);
     }
-    static JSONObject
-        getMailConfig(ISession ses, IDocumentServer srv, String mtpn, IStringMatrix mtrx) throws Exception {
+    static JSONObject getMailConfig(ISession ses, IDocumentServer srv, String mtpn, IStringMatrix mtrx) throws Exception {
         if(mtrx == null){
             mtrx = getMailConfigMatrix(ses, srv, mtpn);
         }
@@ -361,8 +320,7 @@ public class Utils {
         }
         return rtrn;
     }
-    static void
-        sendHTMLMail(ISession ses, IDocumentServer srv, JSONObject mcfg, JSONObject pars) throws Exception {
+    static void sendHTMLMail(ISession ses, IDocumentServer srv, JSONObject mcfg, JSONObject pars) throws Exception {
         String host = mcfg.getString("host");
         String port = mcfg.getString("port");
         String protocol = mcfg.getString("protocol");

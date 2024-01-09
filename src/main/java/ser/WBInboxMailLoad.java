@@ -81,7 +81,7 @@ public class WBInboxMailLoad extends UnifiedAgent {
         IInformationObject prjt = getProject(prjn);
         if(prjt == null){return null;}
 
-        IDocument dtpl = Utils.getTemplateDocument(prjt, Conf.MailTemplates.Project);
+        IDocument dtpl = Utils.getTemplateDocument(prjt, Conf.MailTemplates.Project, ses, srv);
         if(dtpl == null){
             mailTemplates.put("!" + prjn, "[[ " + prjn + " ]]");
             return null;
