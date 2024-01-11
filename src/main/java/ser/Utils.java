@@ -1,6 +1,12 @@
 package ser;
 
 import com.ser.blueline.*;
+import com.ser.blueline.bpm.IBpmService;
+import com.ser.blueline.bpm.IProcessInstance;
+import com.ser.blueline.bpm.IProcessType;
+import com.ser.blueline.bpm.ITask;
+import com.ser.blueline.metaDataComponents.IArchiveClass;
+import com.ser.blueline.metaDataComponents.IArchiveFolderClass;
 import com.ser.blueline.metaDataComponents.IStringMatrix;
 import com.ser.foldermanager.IElement;
 import com.ser.foldermanager.IElements;
@@ -17,25 +23,61 @@ import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeMultipart;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.poi.common.usermodel.HyperlinkType;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.json.JSONObject;
 
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Utils {
+    static Logger log = LogManager.getLogger();
+    static ISession session = null;
+    static IDocumentServer server = null;
+    static IBpmService bpm;
+    static void loadDirectory(String path) {
+        (new File(path)).mkdir();
+    }
+    public static boolean hasDescriptor(IInformationObject object, String descName){
+        IDescriptor[] descs = session.getDocumentServer().getDescriptorByName(descName, session);
+        List<String> checkList = new ArrayList<>();
+        for(IDescriptor ddsc : descs){
+            checkList.add(ddsc.getId());
+        }
 
+        String[] descIds = new String[0];
+        if(object instanceof IFolder){
+            String classID = object.getClassID();
+            IArchiveFolderClass folderClass = session.getDocumentServer().getArchiveFolderClass(classID , session);
+            descIds = folderClass.getAssignedDescriptorIDs();
+        }else if(object instanceof IDocument){
+            IArchiveClass documentClass = ((IDocument) object).getArchiveClass();
+            descIds = documentClass.getAssignedDescriptorIDs();
+        }else if(object instanceof ITask){
+            IProcessType processType = ((ITask) object).getProcessType();
+            descIds = processType.getAssignedDescriptorIDs();
+        }else if(object instanceof IProcessInstance){
+            IProcessType processType = ((IProcessInstance) object).getProcessType();
+            descIds = processType.getAssignedDescriptorIDs();
+        }
+
+        List<String> descList = Arrays.asList(descIds);
+        for(String dId : descList){
+            if(checkList.contains(dId)){return true;}
+        }
+        return false;
+    }
     public static Row getMasterRow(Sheet sheet, String prfx, Integer colIx)  {
         for (Row row : sheet) {
             Cell cll1 = row.getCell(colIx);
@@ -161,7 +203,7 @@ public class Utils {
         tost.close();
 
     }
-    public static boolean hasDescriptor(IInformationObject infObj, String dscn) throws Exception {
+    public static boolean hasDescriptor_old01(IInformationObject infObj, String dscn) throws Exception {
         IValueDescriptor[] vds = infObj.getDescriptorList();
         for(IValueDescriptor vd : vds){
             if(vd.getName().equals(dscn)){return true;}
@@ -251,13 +293,13 @@ public class Utils {
                 .append(" AND ")
                 .append(Conf.DescriptorLiterals.PrjCardCode).append(" = '").append(prjn).append("'");
         String whereClause = builder.toString();
-        System.out.println("Where Clause: " + whereClause);
+        log.info("Where Clause: " + whereClause);
 
         IInformationObject[] informationObjects = helper.createQuery(new String[]{Conf.Databases.ProjectFolder} , whereClause , "", 1, false);
         if(informationObjects.length < 1) {return null;}
         return informationObjects[0];
     }
-    static IDocument getTemplateDocument(IInformationObject info, String tpltName, ISession ses, IDocumentServer srv) throws Exception {
+    static IDocument getTemplateDocument(IInformationObject info, String tpltName) throws Exception {
         List<INode> nods = ((IFolder) info).getNodesByName("Templates");
         IDocument rtrn = null;
         for(INode node : nods){
@@ -279,8 +321,8 @@ public class Utils {
             }
             if(rtrn != null){break;}
         }
-        if(srv != null && ses != null) {
-            rtrn = srv.getDocumentCurrentVersion(ses, rtrn.getID());
+        if(server != null && session != null) {
+            rtrn = server.getDocumentCurrentVersion(session, rtrn.getID());
         }
         return rtrn;
     }
@@ -299,17 +341,17 @@ public class Utils {
         rtrn = rtrn.replace("ï»¿", "");
         return rtrn;
     }
-    static IStringMatrix getMailConfigMatrix(ISession ses, IDocumentServer srv, String mtpn) throws Exception {
-        IStringMatrix rtrn = srv.getStringMatrix("CCM_MAIL_CONFIG", ses);
+    static IStringMatrix getMailConfigMatrix() throws Exception {
+        IStringMatrix rtrn = server.getStringMatrix("CCM_MAIL_CONFIG", session);
         if (rtrn == null) throw new Exception("MailConfig Global Value List not found");
         return rtrn;
     }
-    static JSONObject getMailConfig(ISession ses, IDocumentServer srv, String mtpn) throws Exception {
-        return getMailConfig(ses, srv, mtpn, null);
+    static JSONObject getMailConfig() throws Exception {
+        return getMailConfig(null);
     }
-    static JSONObject getMailConfig(ISession ses, IDocumentServer srv, String mtpn, IStringMatrix mtrx) throws Exception {
+    static JSONObject getMailConfig(IStringMatrix mtrx) throws Exception {
         if(mtrx == null){
-            mtrx = getMailConfigMatrix(ses, srv, mtpn);
+            mtrx = getMailConfigMatrix();
         }
         if(mtrx == null) throw new Exception("MailConfig Global Value List not found");
         List<List<String>> rawTable = mtrx.getRawRows();
@@ -320,7 +362,7 @@ public class Utils {
         }
         return rtrn;
     }
-    static void sendHTMLMail(ISession ses, IDocumentServer srv, JSONObject mcfg, JSONObject pars) throws Exception {
+    static void sendHTMLMail(JSONObject mcfg, JSONObject pars) throws Exception {
         String host = mcfg.getString("host");
         String port = mcfg.getString("port");
         String protocol = mcfg.getString("protocol");
@@ -390,9 +432,9 @@ public class Utils {
             };
         }
         props.put("mail.mime.charset","UTF-8");
-        Session session = (authenticator == null ? Session.getDefaultInstance(props) : Session.getDefaultInstance(props, authenticator));
+        Session sess = (authenticator == null ? Session.getDefaultInstance(props) : Session.getDefaultInstance(props, authenticator));
 
-        MimeMessage message = new MimeMessage(session);
+        MimeMessage message = new MimeMessage(sess);
         message.setFrom(new InternetAddress(sender.replace(";", ",")));
         message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(mailTo.replace(";", ",")));
         message.setRecipients(Message.RecipientType.CC, InternetAddress.parse(mailCC.replace(";", ",")));

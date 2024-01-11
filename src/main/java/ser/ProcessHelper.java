@@ -8,15 +8,14 @@ import com.ser.foldermanager.IFolder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 public class ProcessHelper {
-
+    private Logger log = LogManager.getLogger();
     private IDocumentServer documentServer;
     private ISession session;
-
-    private Logger log = LogManager.getLogger();
     public ProcessHelper(ISession session){
         this.session = session;
         this.documentServer = session.getDocumentServer();
