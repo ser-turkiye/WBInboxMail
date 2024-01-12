@@ -321,7 +321,7 @@ public class Utils {
             }
             if(rtrn != null){break;}
         }
-        if(server != null && session != null) {
+        if(rtrn != null && server != null && session != null) {
             rtrn = server.getDocumentCurrentVersion(session, rtrn.getID());
         }
         return rtrn;
