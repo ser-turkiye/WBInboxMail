@@ -231,8 +231,10 @@ public class Utils {
     public static String exportDocument(IDocument document, String exportPath, String fileName) throws IOException {
         String rtrn ="";
         IDocumentPart partDocument = document.getPartDocument(document.getDefaultRepresentation() , 0);
+
         String fName = (!fileName.isEmpty() ? fileName : partDocument.getFilename());
         fName = fName.replaceAll("[\\\\/:*?\"<>|]", "_");
+
         try (InputStream inputStream = partDocument.getRawDataAsStream()) {
             IFDE fde = partDocument.getFDE();
             if (fde.getFDEType() == IFDE.FILE) {

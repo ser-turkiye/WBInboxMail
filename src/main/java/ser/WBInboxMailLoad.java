@@ -101,6 +101,7 @@ public class WBInboxMailLoad extends UnifiedAgent {
         if(wbMail == null || wbMail.isEmpty()){return;}
 
         IWorkbasketContent wbco = swb.getWorkbasketContent();
+        wbco.query();
         List<ITask> tasks = wbco.getTasks();
         if(tasks.size() < 1){return;}
 
@@ -158,7 +159,7 @@ public class WBInboxMailLoad extends UnifiedAgent {
         for(String prjn : prjs){
             if(!prjDocs.has(prjn)){continue;}
             JSONObject docs = (JSONObject) prjDocs.get(prjn);
-            if(docs.length() < 1){continue;}
+            if(docs == null || docs.length() < 1){continue;}
 
 
             String uniqueId = UUID.randomUUID().toString();
