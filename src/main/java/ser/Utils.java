@@ -42,11 +42,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Utils {
-    static Logger log = LogManager.getLogger();
-    static ISession session = null;
-    static IDocumentServer server = null;
-    static IBpmService bpm;
-    static void loadDirectory(String path) {
+    public static Logger log = LogManager.getLogger();
+    public static ISession session = null;
+    public static IDocumentServer server = null;
+    public static IBpmService bpm;
+    public static void loadDirectory(String path) {
         (new File(path)).mkdir();
     }
     public static boolean hasDescriptor(IInformationObject object, String descName){
@@ -92,7 +92,7 @@ public class Utils {
         }
         return null;
     }
-    private static Row copyRow(org.apache.poi.ss.usermodel.Workbook workbook, Sheet worksheet, int sourceRowNum, int destinationRowNum) {
+    public static Row copyRow(org.apache.poi.ss.usermodel.Workbook workbook, Sheet worksheet, int sourceRowNum, int destinationRowNum) {
 
         Row newRow = worksheet.getRow(destinationRowNum);
         Row sourceRow = worksheet.getRow(sourceRowNum);
@@ -289,7 +289,7 @@ public class Utils {
         twrb.write(tost);
         tost.close();
     }
-    static IInformationObject getProjectWorkspace(String prjn, ProcessHelper helper) {
+    public static IInformationObject getProjectWorkspace(String prjn, ProcessHelper helper) {
         StringBuilder builder = new StringBuilder();
         builder.append("TYPE = '").append(Conf.ClassIDs.ProjectWorkspace).append("'")
                 .append(" AND ")
@@ -301,7 +301,29 @@ public class Utils {
         if(informationObjects.length < 1) {return null;}
         return informationObjects[0];
     }
-    static IDocument getTemplateDocument(IInformationObject info, String tpltName) throws Exception {
+    public static JSONObject getProjectWorkspaces( ProcessHelper helper) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("TYPE = '").append(Conf.ClassIDs.ProjectWorkspace).append("'");
+        String whereClause = builder.toString();
+        log.info("Where Clause: " + whereClause);
+
+        IInformationObject[] list = helper.createQuery(new String[]{Conf.Databases.ProjectFolder} , whereClause , "", 0, false);
+        JSONObject rtrn = new JSONObject();
+
+        for(IInformationObject item : list){
+            if(!hasDescriptor(item, Conf.Descriptors.ProjectNo)){continue;}
+
+            String prjn = item.getDescriptorValue(Conf.Descriptors.ProjectNo, String.class);
+            prjn = (prjn == null ? "" : prjn);
+
+            if(prjn.isEmpty()){continue;}
+            if(rtrn.has(prjn)){continue;}
+            rtrn.put(prjn, item);
+        }
+
+        return rtrn;
+    }
+    public static IDocument getTemplateDocument(IInformationObject info, String tpltName) throws Exception {
         List<INode> nods = ((IFolder) info).getNodesByName("Templates");
         IDocument rtrn = null;
         for(INode node : nods){
@@ -337,21 +359,21 @@ public class Utils {
         sheet.saveToHtml(htmlPath, options);
         return htmlPath;
     }
-    static String getHTMLFileContent (String path) throws Exception {
+    public static String getHTMLFileContent (String path) throws Exception {
         String rtrn = new String(Files.readAllBytes(Paths.get(path)));
         rtrn = rtrn.replace("\uFEFF", "");
         rtrn = rtrn.replace("ï»¿", "");
         return rtrn;
     }
-    static IStringMatrix getMailConfigMatrix() throws Exception {
+    public static IStringMatrix getMailConfigMatrix() throws Exception {
         IStringMatrix rtrn = server.getStringMatrix("CCM_MAIL_CONFIG", session);
         if (rtrn == null) throw new Exception("MailConfig Global Value List not found");
         return rtrn;
     }
-    static JSONObject getMailConfig() throws Exception {
+    public static JSONObject getMailConfig() throws Exception {
         return getMailConfig(null);
     }
-    static JSONObject getMailConfig(IStringMatrix mtrx) throws Exception {
+    public static JSONObject getMailConfig(IStringMatrix mtrx) throws Exception {
         if(mtrx == null){
             mtrx = getMailConfigMatrix();
         }
@@ -364,7 +386,7 @@ public class Utils {
         }
         return rtrn;
     }
-    static void sendHTMLMail(JSONObject mcfg, JSONObject pars) throws Exception {
+    public static void sendHTMLMail(JSONObject mcfg, JSONObject pars) throws Exception {
         String host = mcfg.getString("host");
         String port = mcfg.getString("port");
         String protocol = mcfg.getString("protocol");
