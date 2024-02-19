@@ -21,6 +21,7 @@ public class Conf {
     }
     public static class WBInboxMailPaths {
         public static final String MainPath = "C:/tmp2/bulk/wb-inboxmails";
+        public static final String EscalationMailPaths = "C:/tmp2/bulk/escalation-mails";
         public static final String WebBase = "http://localhost/webcube/";
     }
     public static class MainWFUpdateSheetIndex {
@@ -29,6 +30,7 @@ public class Conf {
     public static class Databases{
         public static final String Company = "D_QCON";
         public static final String ProjectFolder = "PRJ_FOLDER";
+        public static final String Process = "BPM";
     }
     public static class ClassIDs{
         public static final String Template = "b9cf43d1-a4d3-482f-9806-44ae64c6139d";
