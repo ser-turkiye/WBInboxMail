@@ -329,7 +329,7 @@ public class Utils {
             StringBuilder builder = new StringBuilder();
             builder.append("TYPE = '").append(Conf.ClassIDs.SubReview).append("'");
             builder.append(" AND CCMPRJCARD_CODE = '").append(prjn).append("'");
-            builder.append(" AND WFL_TASK_STATUS IN (4)");
+            builder.append(" AND WFL_TASK_STATUS IN (2)");
             builder.append(" AND WFL_TASK_CODE = 'review'");
             String whereClause = builder.toString();
             log.info("Where Clause: " + whereClause);
