@@ -329,8 +329,37 @@ public class Utils {
             StringBuilder builder = new StringBuilder();
             builder.append("TYPE = '").append(Conf.ClassIDs.SubReview).append("'");
             builder.append(" AND CCMPRJCARD_CODE = '").append(prjn).append("'");
-            builder.append(" AND WFL_TASK_STATUS IN (2)");
+            builder.append(" AND WFL_TASK_STATUS IN (2,4,16)");
             builder.append(" AND WFL_TASK_CODE = 'review'");
+            String whereClause = builder.toString();
+            log.info("Where Clause: " + whereClause);
+
+            IInformationObject[] list = helper.createQuery(new String[]{Conf.Databases.Process}, whereClause, "", 0, false);
+
+            for (IInformationObject item : list) {
+                if (!hasDescriptor(item, Conf.Descriptors.ProjectNo)) {
+                    continue;
+                }
+                //String prjn = item.getDescriptorValue(Conf.Descriptors.ProjectNo, String.class);
+                prjn = (prjn == null ? "" : prjn);
+
+                if (prjn.isEmpty()) {
+                    continue;
+                }
+                //if(rtrn.has(prjn)){continue;}
+                rtrn.add((ITask) item);
+            }
+        }
+        return rtrn;
+    }
+    public static List<ITask> getMainReviewProcesses(ProcessHelper helper, JSONObject projects, String taskCode) {
+        List<ITask> rtrn = new ArrayList<>();
+        for(String prjn : projects.keySet()) {
+            StringBuilder builder = new StringBuilder();
+            builder.append("TYPE = '").append(Conf.ClassIDs.ReviewMain).append("'");
+            builder.append(" AND CCMPRJCARD_CODE = '").append(prjn).append("'");
+            builder.append(" AND WFL_TASK_STATUS IN (2,4,16)");
+            builder.append(" AND WFL_TASK_CODE = '"+taskCode+"'");
             String whereClause = builder.toString();
             log.info("Where Clause: " + whereClause);
 

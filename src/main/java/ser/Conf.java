@@ -10,6 +10,7 @@ public class Conf {
     }
     public static class MailTemplates{
         public static final String Project = "MAIL_WORKBASKET_LIST";
+        public static final String Reviewer = "MAIL_ESCALATION_REVIEWER_LIST";
     }
 
     public static class WBInboxMailSheetIndex {

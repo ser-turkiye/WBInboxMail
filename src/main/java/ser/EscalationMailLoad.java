@@ -1,13 +1,9 @@
 package ser;
 
 import com.ser.blueline.*;
-import com.ser.blueline.bpm.IProcessInstance;
-import com.ser.blueline.bpm.ITask;
-import com.ser.blueline.bpm.IWorkbasket;
-import com.ser.blueline.bpm.IWorkbasketContent;
+import com.ser.blueline.bpm.*;
 import com.ser.blueline.metaDataComponents.IStringMatrix;
 import de.ser.doxis4.agentserver.UnifiedAgent;
-import org.apache.commons.collections4.IteratorUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
@@ -24,11 +20,9 @@ public class EscalationMailLoad extends UnifiedAgent {
     private Logger log = LogManager.getLogger();
     IDocument mailTemplate = null;
     JSONObject projects = new JSONObject();
-    JSONObject DCCList = new JSONObject();
-    JSONObject ConsalidatorList = new JSONObject();
-    JSONObject PMList = new JSONObject();
     JSONObject tasks = new JSONObject();
     List<ITask> subprcss = new ArrayList<>();
+    List<ITask> mainprcss = new ArrayList<>();
     ProcessHelper helper;
 
     @Override
@@ -52,22 +46,17 @@ public class EscalationMailLoad extends UnifiedAgent {
 
             for(String prjn : projects.keySet()){
                 IInformationObject prjt = (IInformationObject) projects.get(prjn);
-                IDocument dtpl = Utils.getTemplateDocument(prjt, Conf.MailTemplates.Project);
+                IDocument dtpl = Utils.getTemplateDocument(prjt, Conf.MailTemplates.Reviewer);
                 if(dtpl == null){continue;}
                 mailTemplate = dtpl;
             }
 
-            notifyForReviewer(mcfg,mailTemplate);
-
             if(mailTemplate == null){throw new Exception("Mail template not found.");}
 
-           /* List<IWorkbasket> wbs = Utils.bpm.getWorkbaskets();
-            for (IWorkbasket wb : wbs){
-                IWorkbasket swb = Utils.bpm.getWorkbasket(wb.getID());
-                if(swb.getNotifyEMail() == null){continue;}
-                if(!swb.getNotifyEMail().contains("bulent")){continue;}
-                runWorkbasketForReviewer(swb, mcfg, mailTemplate);
-            }*/
+            notifyForReviewer(mcfg,mailTemplate);
+            //notifyForConsalidators(mcfg,mailTemplate);
+            //notifyForDccs(mcfg,mailTemplate);
+
             log.info("Tested.");
         } catch (Exception e) {
             //throw new RuntimeException(e);
@@ -93,10 +82,13 @@ public class EscalationMailLoad extends UnifiedAgent {
         return iprj;
     }
     private void notifyForReviewer(JSONObject mcfg, IDocument mtpl) throws Exception {
-        JSONObject docs = new JSONObject();
+        JSONObject MailList = new JSONObject();
+        JSONObject ConsalidatorList = new JSONObject();
+        JSONObject DCCList = new JSONObject();
         IWorkbasket wbsk = null;
-        String wbMail = "", mailExcelPath = "";
+        String wbMail = "", mailExcelPath = "", uniqueId = "";
         JSONObject mbms = new JSONObject();
+        int listSize = 0;
 
         subprcss = Utils.getSubReviewProcesses(helper,projects);
         for(ITask task : subprcss){
@@ -122,13 +114,11 @@ public class EscalationMailLoad extends UnifiedAgent {
             if(prjn == null || prjn.isEmpty()){continue;}
             log.info(" *** subprocess prjn [" + tcnt + "] : " + prjn);
 
-            if(docs.has(task.getID())){continue;}
-
-            List<String> cnslList = consolidatorList((IInformationObject) task);
-
             IDocument prjCardDoc = getProjectCard(prjn);
+            List<String> cnslList = consolidatorList((IInformationObject) task);
+            String dccMailList = (prjCardDoc != null ? dccMails(prjCardDoc) : "");
             String prjDocRvwDrtS = (prjCardDoc != null ? prjCardDoc.getDescriptorValue("ccmPRJCard_ReviewerDrtn") : "0");
-
+            String isAutoComplete = (prjCardDoc != null ? prjCardDoc.getDescriptorValue("ObjectState") : "false");
             long prjRvwDrtn = Long.parseLong(prjDocRvwDrtS);
 
             log.info("    -> class-name : " + task.getName());
@@ -150,31 +140,435 @@ public class EscalationMailLoad extends UnifiedAgent {
                 durh = ((TimeUnit.MINUTES.convert(diff, TimeUnit.MILLISECONDS) - (durd * 24 * 60)) * 100 / 60) / 100d;
             }
 
-            ///escalation list creating by consalidators
+            ///escalation list creating for consalidators
             for(String cnslId : cnslList) {
                 if(cnslId.isEmpty()){continue;}
                 IUser mmbr = getDocumentServer().getUserByLoginName(getSes() , getUserLoginByWB(cnslId));
                 if(mmbr == null){continue;}
                 ConsalidatorList.accumulate(mmbr.getEMailAddress(), task.getID());
-                docs.put(task.getID(), task);
+            }
+            ///escalation list creating for dcc
+            DCCList.accumulate(dccMailList, task.getID());
+
+            if(!Objects.equals(isAutoComplete, "false") && isAutoComplete!=null) {
+                moveCurrentTaskToNext(task);
             }
         }
 
-        String uniqueId = "";
-        int listSize = 0;
         for(String keyStr : ConsalidatorList.keySet()) {
+            wbMail = keyStr;
             Object value = ConsalidatorList.get(keyStr);
             uniqueId = UUID.randomUUID().toString();
             mailExcelPath = Utils.exportDocument(mtpl, Conf.WBInboxMailPaths.EscalationMailPaths, Conf.MailTemplates.Project + "[" + uniqueId + "]");
             int dcnt = 0;
-            if (value instanceof JSONObject) {
-
-            } else if (value instanceof JSONArray) {
+            if (value instanceof JSONArray) {
                 JSONArray arr = (JSONArray) value;
                 listSize = arr.length();
-                loadTableRows(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, "Task", Conf.WBInboxMailRowGroups.MailColInx, arr.length());
+                loadTableRows(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, "Task", Conf.WBInboxMailRowGroups.MailColInx, listSize);
 
-                mbms.put("Fullname", keyStr);
+                mbms.put("Fullname", keyStr + " (Consolidators)");
+                mbms.put("Count", listSize + "");
+
+                for(int i = 0; i < arr.length(); i++){
+                    String tID = arr.getString(i);
+                    dcnt++;
+                    ITask xtsk = getBpm().findTask(tID);
+                    if(xtsk == null){continue;}
+                    IProcessInstance proi = xtsk.getProcessInstance();
+                    IInformationObject mdoc = (proi != null ? proi.getMainInformationObject() : null);
+
+                    IWorkbasket orwb = xtsk.getOriginalWorkbasket();
+                    String owbn = "";
+                    if(orwb != null && orwb.getID() != wbsk.getID()){
+                        owbn = orwb.getFullName();
+                    }
+
+                    Date tbgn = null, tend = new Date();
+                    if(xtsk.getReadyDate() != null){
+                        tbgn = xtsk.getReadyDate();
+                    }
+
+                    long durd  = 0L;
+                    double durh  = 0.0;
+                    if(tend != null && tbgn != null) {
+                        long diff = (tend.getTime() > tbgn.getTime() ? tend.getTime() - tbgn.getTime() : tbgn.getTime() - tend.getTime());
+                        durd = TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS);
+                        durh = ((TimeUnit.MINUTES.convert(diff, TimeUnit.MILLISECONDS) - (durd * 24 * 60)) * 100 / 60) / 100d;
+                    }
+
+                    String rcvf = "", rcvo = "";
+                    if(xtsk.getPreviousWorkbasket() != null){
+                        rcvf = xtsk.getPreviousWorkbasket().getFullName();
+                    }
+                    if(tbgn != null){
+                        rcvo = (new SimpleDateFormat("dd-MM-yyyy HH:mm")).format(tbgn);
+                    }
+
+                    String prjn = "",  mdno = "", mdrn = "", mdnm = "";
+                    if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.ProjectNo)){
+                        prjn = mdoc.getDescriptorValue(Conf.Descriptors.ProjectNo, String.class);
+                    }
+                    if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.DocNumber)){
+                        mdno = mdoc.getDescriptorValue(Conf.Descriptors.DocNumber, String.class);
+                    }
+                    if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.Revision)){
+                        mdrn = mdoc.getDescriptorValue(Conf.Descriptors.Revision, String.class);
+                    }
+                    if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.Name)){
+                        mdnm = mdoc.getDescriptorValue(Conf.Descriptors.Name, String.class);
+                    }
+
+                    mbms.put("Task" + dcnt, xtsk.getName() + " (" + xtsk.getDescriptorValue("LayerName") + ")");
+                    mbms.put("ProcessTitle" + dcnt, (proi != null ? proi.getDisplayName() : ""));
+                    mbms.put("Delegation" + dcnt, (owbn != null ? owbn : ""));
+                    mbms.put("ProjectNo" + dcnt, (prjn != null  ? prjn : ""));
+                    mbms.put("DocNo" + dcnt, (mdno != null  ? mdno : ""));
+                    mbms.put("RevNo" + dcnt, (mdrn != null  ? mdrn : ""));
+                    mbms.put("DocName" + dcnt, (mdnm != null  ? mdnm : ""));
+                    mbms.put("ReceivedFrom" + dcnt, (rcvf != null ? rcvf : ""));
+                    mbms.put("ReceivedOn" + dcnt, (rcvo != null ? rcvo : ""));
+                    mbms.put("DurDay" + dcnt, durd + "");
+                    mbms.put("DurHour" + dcnt, durh + "");
+                    mbms.put("DoxisLink" + dcnt, mcfg.get("webBase") + helper.getTaskURL(xtsk.getID()));
+                    mbms.put("DoxisLink" + dcnt + ".Text", "( Link )");
+                }
+            }
+            else if (value instanceof String) {
+                String tID = (String) value;
+
+                mbms.put("Fullname", keyStr + "( Consalidator)");
+                mbms.put("Count", 1 + "");
+
+                loadTableRows(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, "Task", Conf.WBInboxMailRowGroups.MailColInx, 1);
+
+                dcnt = 1;
+                ITask xtsk = getBpm().findTask(tID);
+                if(xtsk == null){continue;}
+                IProcessInstance proi = xtsk.getProcessInstance();
+                IInformationObject mdoc = (proi != null ? proi.getMainInformationObject() : null);
+
+                IWorkbasket orwb = xtsk.getOriginalWorkbasket();
+                String owbn = "";
+                if(orwb != null && orwb.getID() != wbsk.getID()){
+                    owbn = orwb.getFullName();
+                }
+
+                Date tbgn = null, tend = new Date();
+                if(xtsk.getReadyDate() != null){
+                    tbgn = xtsk.getReadyDate();
+                }
+
+                long durd  = 0L;
+                double durh  = 0.0;
+                if(tend != null && tbgn != null) {
+                    long diff = (tend.getTime() > tbgn.getTime() ? tend.getTime() - tbgn.getTime() : tbgn.getTime() - tend.getTime());
+                    durd = TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS);
+                    durh = ((TimeUnit.MINUTES.convert(diff, TimeUnit.MILLISECONDS) - (durd * 24 * 60)) * 100 / 60) / 100d;
+                }
+
+                String rcvf = "", rcvo = "";
+                if(xtsk.getPreviousWorkbasket() != null){
+                    rcvf = xtsk.getPreviousWorkbasket().getFullName();
+                }
+                if(tbgn != null){
+                    rcvo = (new SimpleDateFormat("dd-MM-yyyy HH:mm")).format(tbgn);
+                }
+
+                String prjn = "",  mdno = "", mdrn = "", mdnm = "";
+                if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.ProjectNo)){
+                    prjn = mdoc.getDescriptorValue(Conf.Descriptors.ProjectNo, String.class);
+                }
+                if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.DocNumber)){
+                    mdno = mdoc.getDescriptorValue(Conf.Descriptors.DocNumber, String.class);
+                }
+                if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.Revision)){
+                    mdrn = mdoc.getDescriptorValue(Conf.Descriptors.Revision, String.class);
+                }
+                if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.Name)){
+                    mdnm = mdoc.getDescriptorValue(Conf.Descriptors.Name, String.class);
+                }
+
+                mbms.put("Task" + dcnt, xtsk.getName() + " (" + xtsk.getDescriptorValue("LayerName") + ")");
+                mbms.put("ProcessTitle" + dcnt, (proi != null ? proi.getDisplayName() : ""));
+                mbms.put("Delegation" + dcnt, (owbn != null ? owbn : ""));
+                mbms.put("ProjectNo" + dcnt, (prjn != null  ? prjn : ""));
+                mbms.put("DocNo" + dcnt, (mdno != null  ? mdno : ""));
+                mbms.put("RevNo" + dcnt, (mdrn != null  ? mdrn : ""));
+                mbms.put("DocName" + dcnt, (mdnm != null  ? mdnm : ""));
+                mbms.put("ReceivedFrom" + dcnt, (rcvf != null ? rcvf : ""));
+                mbms.put("ReceivedOn" + dcnt, (rcvo != null ? rcvo : ""));
+                mbms.put("DurDay" + dcnt, durd + "");
+                mbms.put("DurHour" + dcnt, durh + "");
+                mbms.put("DoxisLink" + dcnt, mcfg.get("webBase") + helper.getTaskURL(xtsk.getID()));
+                mbms.put("DoxisLink" + dcnt + ".Text", "( Link )");
+            }
+            else {
+                log.info("Value: {0}", value);
+            }
+
+            saveWBInboxExcel(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, mbms);
+
+            String mailHtmlPath = Utils.convertExcelToHtml(mailExcelPath, Conf.WBInboxMailPaths.EscalationMailPaths + "/" + Conf.MailTemplates.Project + "[" + uniqueId + "].html");
+            JSONObject mail = new JSONObject();
+
+            mail.put("To", wbMail);
+            mail.put("Subject","Escalation for Reviewer");
+            mail.put("BodyHTMLFile", mailHtmlPath);
+
+            try {
+                Utils.sendHTMLMail(mcfg, mail);
+            }catch(Exception ex){
+                log.error("EXCP [Send-Mail] : " + ex.getMessage());
+            }
+        }
+        for(String keyStr : DCCList.keySet()) {
+            wbMail = keyStr;
+            Object value = DCCList.get(keyStr);
+            uniqueId = UUID.randomUUID().toString();
+            mailExcelPath = Utils.exportDocument(mtpl, Conf.WBInboxMailPaths.EscalationMailPaths, Conf.MailTemplates.Project + "[" + uniqueId + "]");
+            int dcnt = 0;
+            if (value instanceof JSONArray) {
+                JSONArray arr = (JSONArray) value;
+                listSize = arr.length();
+                loadTableRows(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, "Task", Conf.WBInboxMailRowGroups.MailColInx, listSize);
+
+                mbms.put("Fullname", keyStr + " (DCC)");
+                mbms.put("Count", listSize + "");
+
+                for(int i = 0; i < arr.length(); i++){
+                    String tID = arr.getString(i);
+                    dcnt++;
+                    ITask xtsk = getBpm().findTask(tID);
+                    if(xtsk == null){continue;}
+                    IProcessInstance proi = xtsk.getProcessInstance();
+                    IInformationObject mdoc = (proi != null ? proi.getMainInformationObject() : null);
+
+                    IWorkbasket orwb = xtsk.getOriginalWorkbasket();
+                    String owbn = "";
+                    if(orwb != null && orwb.getID() != wbsk.getID()){
+                        owbn = orwb.getFullName();
+                    }
+
+                    Date tbgn = null, tend = new Date();
+                    if(xtsk.getReadyDate() != null){
+                        tbgn = xtsk.getReadyDate();
+                    }
+
+                    long durd  = 0L;
+                    double durh  = 0.0;
+                    if(tend != null && tbgn != null) {
+                        long diff = (tend.getTime() > tbgn.getTime() ? tend.getTime() - tbgn.getTime() : tbgn.getTime() - tend.getTime());
+                        durd = TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS);
+                        durh = ((TimeUnit.MINUTES.convert(diff, TimeUnit.MILLISECONDS) - (durd * 24 * 60)) * 100 / 60) / 100d;
+                    }
+
+                    String rcvf = "", rcvo = "";
+                    if(xtsk.getPreviousWorkbasket() != null){
+                        rcvf = xtsk.getPreviousWorkbasket().getFullName();
+                    }
+                    if(tbgn != null){
+                        rcvo = (new SimpleDateFormat("dd-MM-yyyy HH:mm")).format(tbgn);
+                    }
+
+                    String prjn = "",  mdno = "", mdrn = "", mdnm = "";
+                    if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.ProjectNo)){
+                        prjn = mdoc.getDescriptorValue(Conf.Descriptors.ProjectNo, String.class);
+                    }
+                    if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.DocNumber)){
+                        mdno = mdoc.getDescriptorValue(Conf.Descriptors.DocNumber, String.class);
+                    }
+                    if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.Revision)){
+                        mdrn = mdoc.getDescriptorValue(Conf.Descriptors.Revision, String.class);
+                    }
+                    if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.Name)){
+                        mdnm = mdoc.getDescriptorValue(Conf.Descriptors.Name, String.class);
+                    }
+
+                    mbms.put("Task" + dcnt, xtsk.getName() + " (" + xtsk.getDescriptorValue("LayerName") + ")");
+                    mbms.put("ProcessTitle" + dcnt, (proi != null ? proi.getDisplayName() : ""));
+                    mbms.put("Delegation" + dcnt, (owbn != null ? owbn : ""));
+                    mbms.put("ProjectNo" + dcnt, (prjn != null  ? prjn : ""));
+                    mbms.put("DocNo" + dcnt, (mdno != null  ? mdno : ""));
+                    mbms.put("RevNo" + dcnt, (mdrn != null  ? mdrn : ""));
+                    mbms.put("DocName" + dcnt, (mdnm != null  ? mdnm : ""));
+                    mbms.put("ReceivedFrom" + dcnt, (rcvf != null ? rcvf : ""));
+                    mbms.put("ReceivedOn" + dcnt, (rcvo != null ? rcvo : ""));
+                    mbms.put("DurDay" + dcnt, durd + "");
+                    mbms.put("DurHour" + dcnt, durh + "");
+                    mbms.put("DoxisLink" + dcnt, mcfg.get("webBase") + helper.getTaskURL(xtsk.getID()));
+                    mbms.put("DoxisLink" + dcnt + ".Text", "( Link )");
+                }
+            }
+            else if (value instanceof String) {
+                String tID = (String) value;
+
+                mbms.put("Fullname", keyStr + " (DCC)");
+                mbms.put("Count", 1 + "");
+
+                loadTableRows(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, "Task", Conf.WBInboxMailRowGroups.MailColInx, 1);
+
+                dcnt = 1;
+                ITask xtsk = getBpm().findTask(tID);
+                if(xtsk == null){continue;}
+                IProcessInstance proi = xtsk.getProcessInstance();
+                IInformationObject mdoc = (proi != null ? proi.getMainInformationObject() : null);
+
+                IWorkbasket orwb = xtsk.getOriginalWorkbasket();
+                String owbn = "";
+                if(orwb != null && orwb.getID() != wbsk.getID()){
+                    owbn = orwb.getFullName();
+                }
+
+                Date tbgn = null, tend = new Date();
+                if(xtsk.getReadyDate() != null){
+                    tbgn = xtsk.getReadyDate();
+                }
+
+                long durd  = 0L;
+                double durh  = 0.0;
+                if(tend != null && tbgn != null) {
+                    long diff = (tend.getTime() > tbgn.getTime() ? tend.getTime() - tbgn.getTime() : tbgn.getTime() - tend.getTime());
+                    durd = TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS);
+                    durh = ((TimeUnit.MINUTES.convert(diff, TimeUnit.MILLISECONDS) - (durd * 24 * 60)) * 100 / 60) / 100d;
+                }
+
+                String rcvf = "", rcvo = "";
+                if(xtsk.getPreviousWorkbasket() != null){
+                    rcvf = xtsk.getPreviousWorkbasket().getFullName();
+                }
+                if(tbgn != null){
+                    rcvo = (new SimpleDateFormat("dd-MM-yyyy HH:mm")).format(tbgn);
+                }
+
+                String prjn = "",  mdno = "", mdrn = "", mdnm = "";
+                if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.ProjectNo)){
+                    prjn = mdoc.getDescriptorValue(Conf.Descriptors.ProjectNo, String.class);
+                }
+                if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.DocNumber)){
+                    mdno = mdoc.getDescriptorValue(Conf.Descriptors.DocNumber, String.class);
+                }
+                if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.Revision)){
+                    mdrn = mdoc.getDescriptorValue(Conf.Descriptors.Revision, String.class);
+                }
+                if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.Name)){
+                    mdnm = mdoc.getDescriptorValue(Conf.Descriptors.Name, String.class);
+                }
+
+                mbms.put("Task" + dcnt, xtsk.getName() + " (" + xtsk.getDescriptorValue("LayerName") + ")");
+                mbms.put("ProcessTitle" + dcnt, (proi != null ? proi.getDisplayName() : ""));
+                mbms.put("Delegation" + dcnt, (owbn != null ? owbn : ""));
+                mbms.put("ProjectNo" + dcnt, (prjn != null  ? prjn : ""));
+                mbms.put("DocNo" + dcnt, (mdno != null  ? mdno : ""));
+                mbms.put("RevNo" + dcnt, (mdrn != null  ? mdrn : ""));
+                mbms.put("DocName" + dcnt, (mdnm != null  ? mdnm : ""));
+                mbms.put("ReceivedFrom" + dcnt, (rcvf != null ? rcvf : ""));
+                mbms.put("ReceivedOn" + dcnt, (rcvo != null ? rcvo : ""));
+                mbms.put("DurDay" + dcnt, durd + "");
+                mbms.put("DurHour" + dcnt, durh + "");
+                mbms.put("DoxisLink" + dcnt, mcfg.get("webBase") + helper.getTaskURL(xtsk.getID()));
+                mbms.put("DoxisLink" + dcnt + ".Text", "( Link )");
+            }
+            else {
+                log.info("Value: {0}", value);
+            }
+
+            saveWBInboxExcel(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, mbms);
+
+            String mailHtmlPath = Utils.convertExcelToHtml(mailExcelPath, Conf.WBInboxMailPaths.EscalationMailPaths + "/" + Conf.MailTemplates.Project + "[" + uniqueId + "].html");
+            JSONObject mail = new JSONObject();
+
+            mail.put("To", wbMail);
+            mail.put("Subject","Escalation for Reviewer");
+            mail.put("BodyHTMLFile", mailHtmlPath);
+
+            try {
+                Utils.sendHTMLMail(mcfg, mail);
+            }catch(Exception ex){
+                log.error("EXCP [Send-Mail] : " + ex.getMessage());
+            }
+        }
+        log.info("    -> finish ");
+    }
+    private void notifyForConsalidators(JSONObject mcfg, IDocument mtpl) throws Exception {
+        JSONObject MailList = new JSONObject();
+        JSONObject DCCList = new JSONObject();
+        JSONObject PMList = new JSONObject();
+        JSONObject EMList = new JSONObject();
+        ArrayList<String> allMails = new ArrayList<>();
+        IWorkbasket wbsk = null;
+        String wbMail = "", prjMail = "", mailExcelPath = "", uniqueId = "";
+        JSONObject mbms = new JSONObject();
+        int listSize = 0;
+
+        mainprcss = Utils.getMainReviewProcesses(helper,projects,"Step03");
+        for(ITask task : mainprcss){
+            log.info("    -> start ");
+            int tcnt = 0;
+
+            tcnt++;
+            log.info(" *** subprocess task [" + tcnt + "] : " + task.getDisplayName());
+
+            String clid = task.getClassID();
+            log.info(" *** subprocess class id [" + tcnt + "] : " + clid);
+            if(!clid.equals(Conf.ClassIDs.ReviewMain)){continue;}
+
+            IProcessInstance proi = task.getProcessInstance();
+            if(proi == null){continue;}
+            log.info(" *** subprocess proi [" + tcnt + "] : " + proi.getDisplayName());
+
+            IDocument wdoc = (IDocument) proi.getMainInformationObject();
+            if(wdoc == null){continue;}
+            log.info(" *** subprocess wdoc [" + tcnt + "] : " + wdoc.getDisplayName());
+
+            String prjn = wdoc.getDescriptorValue(Conf.Descriptors.ProjectNo, String.class);
+            if(prjn == null || prjn.isEmpty()){continue;}
+            log.info(" *** subprocess prjn [" + tcnt + "] : " + prjn);
+
+            IDocument prjCardDoc = getProjectCard(prjn);
+            List<String> cnslList = consolidatorList((IInformationObject) task);
+            String dccMailList = (prjCardDoc != null ? dccMails(prjCardDoc) : "");
+            String pmMail = (prjCardDoc != null ? getPmMail(prjCardDoc) : "");
+            String emMail = (prjCardDoc != null ? getEmMail(prjCardDoc) : "");
+            prjMail = getMailByPrj(prjCardDoc,"Consalidator");
+
+            String prjDocRvwDrtS = (prjCardDoc != null ? prjCardDoc.getDescriptorValue("ccmPRJCard_DCCDrtn") : "0");
+
+            long prjRvwDrtn = Long.parseLong(prjDocRvwDrtS);
+
+            log.info("    -> class-name : " + task.getName());
+            log.info("    -> class-id.doc : " + wdoc.getClassID());
+            log.info("    -> class-id.task : " + clid);
+            log.info("    -> display : " + wdoc.getDisplayName());
+
+            Date tbgn = null, tend = new Date();
+            if(task.getReadyDate() != null){
+                tbgn = task.getReadyDate();
+            }
+
+            long durd  = 0L;
+            double durh  = 0.0;
+            if(tend != null && tbgn != null) {
+                long diff = (tend.getTime() > tbgn.getTime() ? tend.getTime() - tbgn.getTime() : tbgn.getTime() - tend.getTime());
+                durd = TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS);
+                if(durd<=prjRvwDrtn){continue;}
+                durh = ((TimeUnit.MINUTES.convert(diff, TimeUnit.MILLISECONDS) - (durd * 24 * 60)) * 100 / 60) / 100d;
+            }
+            ///escalation list creating for consalidators
+            MailList.accumulate(prjMail, task.getID());
+        }
+
+        for(String keyStr : MailList.keySet()) {
+            wbMail = keyStr;
+            Object value = MailList.get(keyStr);
+            uniqueId = UUID.randomUUID().toString();
+            mailExcelPath = Utils.exportDocument(mtpl, Conf.WBInboxMailPaths.EscalationMailPaths, Conf.MailTemplates.Project + "[" + uniqueId + "]");
+            int dcnt = 0;
+            if (value instanceof JSONArray) {
+                JSONArray arr = (JSONArray) value;
+                listSize = arr.length();
+                loadTableRows(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, "Task", Conf.WBInboxMailRowGroups.MailColInx, listSize);
+
+                mbms.put("Fullname", keyStr +  " (Prj All mail for Consolidator)");
                 mbms.put("Count", listSize + "");
 
                 for(int i = 0; i < arr.length(); i++){
@@ -244,7 +638,7 @@ public class EscalationMailLoad extends UnifiedAgent {
             else if (value instanceof String) {
                 String tID = (String) value;
 
-                mbms.put("Fullname", keyStr);
+                mbms.put("Fullname", keyStr +  " (Prj All mail for Consolidator)");
                 mbms.put("Count", 1 + "");
 
                 loadTableRows(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, "Task", Conf.WBInboxMailRowGroups.MailColInx, 1);
@@ -316,15 +710,11 @@ public class EscalationMailLoad extends UnifiedAgent {
 
             saveWBInboxExcel(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, mbms);
 
-            String mailHtmlPath = Utils.convertExcelToHtml(mailExcelPath,
-                    Conf.WBInboxMailPaths.EscalationMailPaths + "/" + Conf.MailTemplates.Project + "[" + uniqueId + "].html");
+            String mailHtmlPath = Utils.convertExcelToHtml(mailExcelPath, Conf.WBInboxMailPaths.EscalationMailPaths + "/" + Conf.MailTemplates.Project + "[" + uniqueId + "].html");
             JSONObject mail = new JSONObject();
 
             mail.put("To", wbMail);
-            mail.put("Subject",
-                    "Workbox Notification ({Count}) Task is waiting your action"
-                            .replace("{Count}", listSize + "")
-            );
+            mail.put("Subject","Escalation for Consolidator");
             mail.put("BodyHTMLFile", mailHtmlPath);
 
             try {
@@ -334,6 +724,254 @@ public class EscalationMailLoad extends UnifiedAgent {
             }
         }
         log.info("    -> finish ");
+    }
+    private void notifyForDccs(JSONObject mcfg, IDocument mtpl) throws Exception {
+        JSONObject MailList = new JSONObject();
+        JSONObject DCCList = new JSONObject();
+        JSONObject PMList = new JSONObject();
+        JSONObject EMList = new JSONObject();
+        ArrayList<String> allMails = new ArrayList<>();
+        IWorkbasket wbsk = null;
+        String wbMail = "", prjMail = "", mailExcelPath = "", uniqueId = "";
+        JSONObject mbms = new JSONObject();
+        int listSize = 0;
+
+        mainprcss = Utils.getMainReviewProcesses(helper,projects,"Step04");
+        for(ITask task : mainprcss){
+            log.info("    -> start ");
+            int tcnt = 0;
+
+            tcnt++;
+            log.info(" *** subprocess task [" + tcnt + "] : " + task.getDisplayName());
+
+            String clid = task.getClassID();
+            log.info(" *** subprocess class id [" + tcnt + "] : " + clid);
+            if(!clid.equals(Conf.ClassIDs.ReviewMain)){continue;}
+
+            IProcessInstance proi = task.getProcessInstance();
+            if(proi == null){continue;}
+            log.info(" *** subprocess proi [" + tcnt + "] : " + proi.getDisplayName());
+
+            IDocument wdoc = (IDocument) proi.getMainInformationObject();
+            if(wdoc == null){continue;}
+            log.info(" *** subprocess wdoc [" + tcnt + "] : " + wdoc.getDisplayName());
+
+            String prjn = wdoc.getDescriptorValue(Conf.Descriptors.ProjectNo, String.class);
+            if(prjn == null || prjn.isEmpty()){continue;}
+            log.info(" *** subprocess prjn [" + tcnt + "] : " + prjn);
+
+            IDocument prjCardDoc = getProjectCard(prjn);
+            List<String> cnslList = consolidatorList((IInformationObject) task);
+            String dccMailList = (prjCardDoc != null ? dccMails(prjCardDoc) : "");
+            String pmMail = (prjCardDoc != null ? getPmMail(prjCardDoc) : "");
+            String emMail = (prjCardDoc != null ? getEmMail(prjCardDoc) : "");
+            prjMail = getMailByPrj(prjCardDoc,"dcc");
+
+            String prjDocRvwDrtS = (prjCardDoc != null ? prjCardDoc.getDescriptorValue("ccmPRJCard_DCCDrtn") : "0");
+
+            long prjRvwDrtn = Long.parseLong(prjDocRvwDrtS);
+
+            log.info("    -> class-name : " + task.getName());
+            log.info("    -> class-id.doc : " + wdoc.getClassID());
+            log.info("    -> class-id.task : " + clid);
+            log.info("    -> display : " + wdoc.getDisplayName());
+
+            Date tbgn = null, tend = new Date();
+            if(task.getReadyDate() != null){
+                tbgn = task.getReadyDate();
+            }
+
+            long durd  = 0L;
+            double durh  = 0.0;
+            if(tend != null && tbgn != null) {
+                long diff = (tend.getTime() > tbgn.getTime() ? tend.getTime() - tbgn.getTime() : tbgn.getTime() - tend.getTime());
+                durd = TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS);
+                if(durd<=prjRvwDrtn){continue;}
+                durh = ((TimeUnit.MINUTES.convert(diff, TimeUnit.MILLISECONDS) - (durd * 24 * 60)) * 100 / 60) / 100d;
+            }
+
+            ///escalation list creating for consalidators
+            MailList.accumulate(prjMail, task.getID());
+
+        }
+
+        for(String keyStr : MailList.keySet()) {
+            wbMail = keyStr;
+            Object value = MailList.get(keyStr);
+            uniqueId = UUID.randomUUID().toString();
+            mailExcelPath = Utils.exportDocument(mtpl, Conf.WBInboxMailPaths.EscalationMailPaths, Conf.MailTemplates.Project + "[" + uniqueId + "]");
+            int dcnt = 0;
+            if (value instanceof JSONArray) {
+                JSONArray arr = (JSONArray) value;
+                listSize = arr.length();
+                loadTableRows(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, "Task", Conf.WBInboxMailRowGroups.MailColInx, listSize);
+
+                mbms.put("Fullname", keyStr +  " (Prj PM and EM mail for Consolidator)");
+                mbms.put("Count", listSize + "");
+
+                for(int i = 0; i < arr.length(); i++){
+                    String tID = arr.getString(i);
+                    dcnt++;
+                    ITask xtsk = getBpm().findTask(tID);
+                    if(xtsk == null){continue;}
+                    IProcessInstance proi = xtsk.getProcessInstance();
+                    IInformationObject mdoc = (proi != null ? proi.getMainInformationObject() : null);
+
+                    IWorkbasket orwb = xtsk.getOriginalWorkbasket();
+                    String owbn = "";
+                    if(orwb != null && orwb.getID() != wbsk.getID()){
+                        owbn = orwb.getFullName();
+                    }
+
+                    Date tbgn = null, tend = new Date();
+                    if(xtsk.getReadyDate() != null){
+                        tbgn = xtsk.getReadyDate();
+                    }
+
+                    long durd  = 0L;
+                    double durh  = 0.0;
+                    if(tend != null && tbgn != null) {
+                        long diff = (tend.getTime() > tbgn.getTime() ? tend.getTime() - tbgn.getTime() : tbgn.getTime() - tend.getTime());
+                        durd = TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS);
+                        durh = ((TimeUnit.MINUTES.convert(diff, TimeUnit.MILLISECONDS) - (durd * 24 * 60)) * 100 / 60) / 100d;
+                    }
+
+                    String rcvf = "", rcvo = "";
+                    if(xtsk.getPreviousWorkbasket() != null){
+                        rcvf = xtsk.getPreviousWorkbasket().getFullName();
+                    }
+                    if(tbgn != null){
+                        rcvo = (new SimpleDateFormat("dd-MM-yyyy HH:mm")).format(tbgn);
+                    }
+
+                    String prjn = "",  mdno = "", mdrn = "", mdnm = "";
+                    if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.ProjectNo)){
+                        prjn = mdoc.getDescriptorValue(Conf.Descriptors.ProjectNo, String.class);
+                    }
+                    if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.DocNumber)){
+                        mdno = mdoc.getDescriptorValue(Conf.Descriptors.DocNumber, String.class);
+                    }
+                    if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.Revision)){
+                        mdrn = mdoc.getDescriptorValue(Conf.Descriptors.Revision, String.class);
+                    }
+                    if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.Name)){
+                        mdnm = mdoc.getDescriptorValue(Conf.Descriptors.Name, String.class);
+                    }
+
+                    mbms.put("Task" + dcnt, xtsk.getName());
+                    mbms.put("ProcessTitle" + dcnt, (proi != null ? proi.getDisplayName() : ""));
+                    mbms.put("Delegation" + dcnt, (owbn != null ? owbn : ""));
+                    mbms.put("ProjectNo" + dcnt, (prjn != null  ? prjn : ""));
+                    mbms.put("DocNo" + dcnt, (mdno != null  ? mdno : ""));
+                    mbms.put("RevNo" + dcnt, (mdrn != null  ? mdrn : ""));
+                    mbms.put("DocName" + dcnt, (mdnm != null  ? mdnm : ""));
+                    mbms.put("ReceivedFrom" + dcnt, (rcvf != null ? rcvf : ""));
+                    mbms.put("ReceivedOn" + dcnt, (rcvo != null ? rcvo : ""));
+                    mbms.put("DurDay" + dcnt, durd + "");
+                    mbms.put("DurHour" + dcnt, durh + "");
+                    mbms.put("DoxisLink" + dcnt, mcfg.get("webBase") + helper.getTaskURL(xtsk.getID()));
+                    mbms.put("DoxisLink" + dcnt + ".Text", "( Link )");
+                }
+            }
+            else if (value instanceof String) {
+                String tID = (String) value;
+
+                mbms.put("Fullname", keyStr +  " (Prj PM and EM mail for Consolidator)");
+                mbms.put("Count", 1 + "");
+
+                loadTableRows(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, "Task", Conf.WBInboxMailRowGroups.MailColInx, 1);
+
+                dcnt = 1;
+                ITask xtsk = getBpm().findTask(tID);
+                if(xtsk == null){continue;}
+                IProcessInstance proi = xtsk.getProcessInstance();
+                IInformationObject mdoc = (proi != null ? proi.getMainInformationObject() : null);
+
+                IWorkbasket orwb = xtsk.getOriginalWorkbasket();
+                String owbn = "";
+                if(orwb != null && orwb.getID() != wbsk.getID()){
+                    owbn = orwb.getFullName();
+                }
+
+                Date tbgn = null, tend = new Date();
+                if(xtsk.getReadyDate() != null){
+                    tbgn = xtsk.getReadyDate();
+                }
+
+                long durd  = 0L;
+                double durh  = 0.0;
+                if(tend != null && tbgn != null) {
+                    long diff = (tend.getTime() > tbgn.getTime() ? tend.getTime() - tbgn.getTime() : tbgn.getTime() - tend.getTime());
+                    durd = TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS);
+                    durh = ((TimeUnit.MINUTES.convert(diff, TimeUnit.MILLISECONDS) - (durd * 24 * 60)) * 100 / 60) / 100d;
+                }
+
+                String rcvf = "", rcvo = "";
+                if(xtsk.getPreviousWorkbasket() != null){
+                    rcvf = xtsk.getPreviousWorkbasket().getFullName();
+                }
+                if(tbgn != null){
+                    rcvo = (new SimpleDateFormat("dd-MM-yyyy HH:mm")).format(tbgn);
+                }
+
+                String prjn = "",  mdno = "", mdrn = "", mdnm = "";
+                if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.ProjectNo)){
+                    prjn = mdoc.getDescriptorValue(Conf.Descriptors.ProjectNo, String.class);
+                }
+                if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.DocNumber)){
+                    mdno = mdoc.getDescriptorValue(Conf.Descriptors.DocNumber, String.class);
+                }
+                if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.Revision)){
+                    mdrn = mdoc.getDescriptorValue(Conf.Descriptors.Revision, String.class);
+                }
+                if(mdoc != null &&  Utils.hasDescriptor((IInformationObject) mdoc, Conf.Descriptors.Name)){
+                    mdnm = mdoc.getDescriptorValue(Conf.Descriptors.Name, String.class);
+                }
+
+                mbms.put("Task" + dcnt, xtsk.getName());
+                mbms.put("ProcessTitle" + dcnt, (proi != null ? proi.getDisplayName() : ""));
+                mbms.put("Delegation" + dcnt, (owbn != null ? owbn : ""));
+                mbms.put("ProjectNo" + dcnt, (prjn != null  ? prjn : ""));
+                mbms.put("DocNo" + dcnt, (mdno != null  ? mdno : ""));
+                mbms.put("RevNo" + dcnt, (mdrn != null  ? mdrn : ""));
+                mbms.put("DocName" + dcnt, (mdnm != null  ? mdnm : ""));
+                mbms.put("ReceivedFrom" + dcnt, (rcvf != null ? rcvf : ""));
+                mbms.put("ReceivedOn" + dcnt, (rcvo != null ? rcvo : ""));
+                mbms.put("DurDay" + dcnt, durd + "");
+                mbms.put("DurHour" + dcnt, durh + "");
+                mbms.put("DoxisLink" + dcnt, mcfg.get("webBase") + helper.getTaskURL(xtsk.getID()));
+                mbms.put("DoxisLink" + dcnt + ".Text", "( Link )");
+            }
+            else {
+                log.info("Value: {0}", value);
+            }
+
+            saveWBInboxExcel(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, mbms);
+
+            String mailHtmlPath = Utils.convertExcelToHtml(mailExcelPath, Conf.WBInboxMailPaths.EscalationMailPaths + "/" + Conf.MailTemplates.Project + "[" + uniqueId + "].html");
+            JSONObject mail = new JSONObject();
+
+            mail.put("To", wbMail);
+            mail.put("Subject","Escalation for DCC");
+            mail.put("BodyHTMLFile", mailHtmlPath);
+
+            try {
+                Utils.sendHTMLMail(mcfg, mail);
+            }catch(Exception ex){
+                log.error("EXCP [Send-Mail] : " + ex.getMessage());
+            }
+        }
+        log.info("    -> finish ");
+    }
+    private void moveCurrentTaskToNext(ITask eventTask) throws Exception{
+        List<IPossibleDecision> decisions = eventTask.findPossibleDecisions();
+        eventTask.setDescriptorValue("Notes","Auto Completed");
+        eventTask.commit();
+        for(IPossibleDecision pdecision : decisions){
+            IDecision decision = pdecision.getDecision();
+            eventTask.complete(decision);
+            break;
+        }
     }
     public String getUserLoginByWB(String wbID){
         String rtrn = "";
@@ -379,11 +1017,44 @@ public class EscalationMailLoad extends UnifiedAgent {
         if(hits == null) return null;
         else return hits.getInformationObjects();
     }
-    public List<String> dccList(IDocument prjCard){
+    public String dccMails(IDocument prjCard){
         String[] membersIDs = new String[0];
+        String rtrn = "";
+        List<String> dcc = new ArrayList<>();
         String dccMembers = prjCard.getDescriptorValue("ccmPrjCard_DccList");
         membersIDs = dccMembers.replace("[", "").replace("]", "").split(",");
-        List<String> rtrn = new ArrayList<>(Arrays.asList(membersIDs));
+        for(String mmbrKey : Arrays.asList(membersIDs)){
+            IUser mmbr = getDocumentServer().getUserByLoginName(getSes() , getUserLoginByWB(mmbrKey));
+            if(mmbr == null){continue;}
+            dcc.add(mmbr.getEMailAddress());
+        }
+        rtrn = String.join(",",dcc);
+        return rtrn;
+    }
+    public String getPmMail(IDocument prjCard){
+        String rtrn = "";
+        String pmMember = prjCard.getDescriptorValue("ccmPRJCard_prjmngr");
+        IUser mmbr = getDocumentServer().getUserByLoginName(getSes() , getUserLoginByWB(pmMember));
+        if(mmbr != null){rtrn = mmbr.getEMailAddress();}
+        return rtrn;
+    }
+    public String getEmMail(IDocument prjCard){
+        String rtrn = "";
+        String pmMember = prjCard.getDescriptorValue("ccmPRJCard_EngMng");
+        IUser mmbr = getDocumentServer().getUserByLoginName(getSes() , getUserLoginByWB(pmMember));
+        if(mmbr != null){rtrn = mmbr.getEMailAddress();}
+        return rtrn;
+    }
+    public String getMailByPrj(IDocument prjCard,String type){
+        String rtrn = "";
+        ArrayList<String> allMails = new ArrayList<>();
+        String dccMailList = (prjCard != null ? dccMails(prjCard) : "");
+        String pmMail = (prjCard != null ? getPmMail(prjCard) : "");
+        String emMail = (prjCard != null ? getEmMail(prjCard) : "");
+        if(type == "Consalidator"){allMails.add(dccMailList);}
+        allMails.add(pmMail);
+        allMails.add(emMail);
+        rtrn = String.join(",", allMails);
         return rtrn;
     }
     public List<String> consolidatorList(IInformationObject doc){
@@ -391,6 +1062,25 @@ public class EscalationMailLoad extends UnifiedAgent {
         String members = (doc.getDescriptorValue("ccmConsolidatorList") == null ? "" : doc.getDescriptorValue("ccmConsolidatorList"));
         membersIDs = members.replace("[", "").replace("]", "").split(",");
         List<String> rtrn = new ArrayList<>(Arrays.asList(membersIDs));
+        return rtrn;
+    }
+    public String getNumber(String nrName){
+        String rtrn = "";
+        String pattern = "";
+        String nrStartS = "";
+        String nrCurrentS = "";
+        IStringMatrix settingsMatrix = getDocumentServer().getStringMatrixByID("SYS_NUMBER_RANGES", getSes());
+        for (int i = 0; i < settingsMatrix.getRowCount(); i++) {
+            String rowID = settingsMatrix.getValue(i, 0);
+            if (rowID.equalsIgnoreCase(nrName)) {
+                pattern = settingsMatrix.getValue(i, 2);
+                nrStartS = settingsMatrix.getValue(i, 3);
+                nrCurrentS = settingsMatrix.getValue(i, 5);
+                break;
+            }
+        }
+
+
         return rtrn;
     }
 }
