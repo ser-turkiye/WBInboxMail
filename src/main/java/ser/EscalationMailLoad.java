@@ -54,8 +54,8 @@ public class EscalationMailLoad extends UnifiedAgent {
             if(mailTemplate == null){throw new Exception("Mail template not found.");}
 
             notifyForReviewer(mcfg,mailTemplate);
-            //notifyForConsalidators(mcfg,mailTemplate);
-            //notifyForDccs(mcfg,mailTemplate);
+            notifyForConsalidators(mcfg,mailTemplate);
+            notifyForDccs(mcfg,mailTemplate);
 
             log.info("Tested.");
         } catch (Exception e) {
@@ -140,6 +140,11 @@ public class EscalationMailLoad extends UnifiedAgent {
                 durh = ((TimeUnit.MINUTES.convert(diff, TimeUnit.MILLISECONDS) - (durd * 24 * 60)) * 100 / 60) / 100d;
             }
 
+            if(!Objects.equals(isAutoComplete, "false") && isAutoComplete!=null) {
+                moveCurrentTaskToNext(task);
+                log.info("Task is ["+ task.getID() +"] auto completed. Duration:" + durd);
+                continue;
+            }
             ///escalation list creating for consalidators
             for(String cnslId : cnslList) {
                 if(cnslId.isEmpty()){continue;}
@@ -149,10 +154,6 @@ public class EscalationMailLoad extends UnifiedAgent {
             }
             ///escalation list creating for dcc
             DCCList.accumulate(dccMailList, task.getID());
-
-            if(!Objects.equals(isAutoComplete, "false") && isAutoComplete!=null) {
-                moveCurrentTaskToNext(task);
-            }
         }
 
         for(String keyStr : ConsalidatorList.keySet()) {
@@ -965,7 +966,7 @@ public class EscalationMailLoad extends UnifiedAgent {
     }
     private void moveCurrentTaskToNext(ITask eventTask) throws Exception{
         List<IPossibleDecision> decisions = eventTask.findPossibleDecisions();
-        eventTask.setDescriptorValue("Notes","Auto Completed");
+        eventTask.setDescriptorValue("Notes","Auto Completed by System (Escalation Raised)");
         eventTask.commit();
         for(IPossibleDecision pdecision : decisions){
             IDecision decision = pdecision.getDecision();
