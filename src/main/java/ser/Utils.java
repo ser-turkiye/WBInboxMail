@@ -34,10 +34,7 @@ import org.json.JSONObject;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -421,6 +418,7 @@ public class Utils {
         String rtrn = new String(Files.readAllBytes(Paths.get(path)));
         rtrn = rtrn.replace("\uFEFF", "");
         rtrn = rtrn.replace("ï»¿", "");
+        rtrn = rtrn.replace("?", "");
         return rtrn;
     }
     public static IStringMatrix getMailConfigMatrix() throws Exception {
@@ -444,7 +442,125 @@ public class Utils {
         }
         return rtrn;
     }
-    public static void sendHTMLMail(JSONObject mcfg, JSONObject pars) throws Exception {
+    public static void sendHTMLMail(JSONObject pars, JSONObject conf) throws Exception {
+        JSONObject mcfg = conf != null ? conf : Utils.getMailConfig();
+
+        String host = mcfg.getString("host");
+        String port = mcfg.getString("port");
+        String protocol = mcfg.getString("protocol");
+        String sender = mcfg.getString("sender");
+        String subject = "";
+        String mailTo = "";
+        String mailCC = "";
+        String attachments = "";
+
+        if(pars.has("From")){
+            sender = pars.getString("From");
+        }
+        if(pars.has("To")){
+            mailTo = pars.getString("To");
+        }
+        if(pars.has("CC")){
+            mailCC = pars.getString("CC");
+        }
+        if(pars.has("Subject")){
+            subject = pars.getString("Subject");
+        }
+        if(pars.has("AttachmentPaths")){
+            attachments = pars.getString("AttachmentPaths");
+        }
+
+
+        Properties props = new Properties();
+        props.put("mail.debug","true");
+        props.put("mail.smtp.debug", "true");
+
+        props.put("mail.smtp.host", host);
+        props.put("mail.smtp.port", port);
+
+        String start_tls = (mcfg.has("start_tls") ? mcfg.getString("start_tls") : "");
+        if(start_tls.equals("true")) {
+            props.put("mail.smtp.starttls.enable", start_tls);
+        }
+
+        String auth = mcfg.getString("auth");
+        props.put("mail.smtp.auth", auth);
+        Authenticator authenticator = null;
+        if(!auth.equals("false")) {
+            String auth_username = mcfg.getString("auth.username");
+            String auth_password = mcfg.getString("auth.password");
+
+            if (host.contains("gmail")) {
+                props.put("mail.smtp.socketFactory.port", port);
+                props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+                props.put("mail.smtp.socketFactory.fallback", "false");
+            }
+            if (protocol != null && protocol.contains("TLSv1.2"))  {
+                props.put("mail.smtp.ssl.protocols", protocol);
+                props.put("mail.smtp.ssl.trust", "*");
+                props.put("mail.smtp.socketFactory.port", port);
+                props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+                props.put("mail.smtp.socketFactory.fallback", "false");
+            }
+            authenticator = new Authenticator(){
+                @Override
+                protected PasswordAuthentication getPasswordAuthentication(){
+                    return new PasswordAuthentication(auth_username, auth_password);
+                }
+            };
+        }
+
+        if(!Objects.equals(mailTo, "")) {
+            Session session = (authenticator == null ? Session.getDefaultInstance(props) : Session.getDefaultInstance(props, authenticator));
+
+            MimeMessage message = new MimeMessage(session);
+            message.setFrom(new InternetAddress(sender.replace(";", ",")));
+            message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(mailTo.replace(";", ",")));
+            message.setRecipients(Message.RecipientType.CC, InternetAddress.parse(mailCC.replace(";", ",")));
+            message.setSubject(subject);
+
+            Multipart multipart = new MimeMultipart("mixed");
+
+            BodyPart htmlBodyPart = new MimeBodyPart();
+            String bodyContent = getFileContent(pars.getString("BodyHTMLFile"));
+
+            htmlBodyPart.setContent(getFileContent(pars.getString("BodyHTMLFile")), "text/html"); //5
+            multipart.addBodyPart(htmlBodyPart);
+
+            String[] atchs = attachments.split("\\;");
+            for (String atch : atchs) {
+                if (atch.isEmpty()) {
+                    continue;
+                }
+                BodyPart attachmentBodyPart = new MimeBodyPart();
+                attachmentBodyPart.setDataHandler(new DataHandler((DataSource) new FileDataSource(atch)));
+
+                String fnam = Paths.get(atch).getFileName().toString();
+                if (pars.has("AttachmentName." + fnam)) {
+                    fnam = pars.getString("AttachmentName." + fnam);
+                }
+
+                attachmentBodyPart.setFileName(fnam);
+                multipart.addBodyPart(attachmentBodyPart);
+
+            }
+
+            message.setContent(multipart);
+            Transport.send(message);
+        }else {
+
+        }
+    }
+    static String getFileContent (String path) throws Exception {
+        //return new String(Files.readAllBytes(Paths.get(path)));
+        String rtrn = new String(Files.readAllBytes(Paths.get(path)));
+        rtrn = rtrn.replace("\uFEFF", "");
+        rtrn = rtrn.replace("ï»¿", "");
+        rtrn = rtrn.replace("ï»¿ï»¿", "");
+        rtrn = rtrn.replace("?", "");
+        return rtrn;
+    }
+    public static void sendHTMLMailOLD(JSONObject mcfg, JSONObject pars) throws Exception {
         String host = mcfg.getString("host");
         String port = mcfg.getString("port");
         String protocol = mcfg.getString("protocol");

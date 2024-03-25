@@ -235,7 +235,8 @@ public class WBInboxMailLoad extends UnifiedAgent {
         mail.put("BodyHTMLFile", mailHtmlPath);
 
         try {
-            Utils.sendHTMLMail(mcfg, mail);
+            //Utils.sendHTMLMail(mcfg, mail);
+            Utils.sendHTMLMail(mail, null);
         }catch(Exception ex){
             log.error("EXCP [Send-Mail] : " + ex.getMessage());
         }

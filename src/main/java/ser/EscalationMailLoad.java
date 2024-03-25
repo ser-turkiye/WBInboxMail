@@ -38,8 +38,9 @@ public class EscalationMailLoad extends UnifiedAgent {
         Utils.loadDirectory(Conf.WBInboxMailPaths.EscalationMailPaths);
 
         try {
-            helper = new ProcessHelper(Utils.session);
             JSONObject mcfg = Utils.getMailConfig();
+
+            helper = new ProcessHelper(Utils.session);
 
             projects = Utils.getProjectWorkspaces(helper);
             mailTemplate = null;
@@ -317,7 +318,8 @@ public class EscalationMailLoad extends UnifiedAgent {
             mail.put("BodyHTMLFile", mailHtmlPath);
 
             try {
-                Utils.sendHTMLMail(mcfg, mail);
+                //Utils.sendHTMLMail(mcfg, mail);
+                Utils.sendHTMLMail(mail, null);
             }catch(Exception ex){
                 log.error("EXCP [Send-Mail] : " + ex.getMessage());
             }
@@ -483,7 +485,8 @@ public class EscalationMailLoad extends UnifiedAgent {
             mail.put("BodyHTMLFile", mailHtmlPath);
 
             try {
-                Utils.sendHTMLMail(mcfg, mail);
+                //Utils.sendHTMLMail(mcfg, mail);
+                Utils.sendHTMLMail(mail, null);
             }catch(Exception ex){
                 log.error("EXCP [Send-Mail] : " + ex.getMessage());
             }
@@ -719,7 +722,8 @@ public class EscalationMailLoad extends UnifiedAgent {
             mail.put("BodyHTMLFile", mailHtmlPath);
 
             try {
-                Utils.sendHTMLMail(mcfg, mail);
+                //Utils.sendHTMLMail(mcfg, mail);
+                Utils.sendHTMLMail(mail, null);
             }catch(Exception ex){
                 log.error("EXCP [Send-Mail] : " + ex.getMessage());
             }
@@ -957,7 +961,8 @@ public class EscalationMailLoad extends UnifiedAgent {
             mail.put("BodyHTMLFile", mailHtmlPath);
 
             try {
-                Utils.sendHTMLMail(mcfg, mail);
+                //Utils.sendHTMLMail(mcfg, mail);
+                Utils.sendHTMLMail(mail, null);
             }catch(Exception ex){
                 log.error("EXCP [Send-Mail] : " + ex.getMessage());
             }
