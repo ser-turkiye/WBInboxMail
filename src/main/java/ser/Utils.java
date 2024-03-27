@@ -557,7 +557,6 @@ public class Utils {
         rtrn = rtrn.replace("\uFEFF", "");
         rtrn = rtrn.replace("ï»¿", "");
         rtrn = rtrn.replace("ï»¿ï»¿", "");
-        rtrn = rtrn.replace("?", "");
         return rtrn;
     }
     public static void sendHTMLMailOLD(JSONObject mcfg, JSONObject pars) throws Exception {
