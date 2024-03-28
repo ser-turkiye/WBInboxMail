@@ -3,6 +3,7 @@ package ser;
 import com.ser.blueline.*;
 import com.ser.blueline.bpm.*;
 import com.ser.blueline.metaDataComponents.IStringMatrix;
+import de.ser.doxis4.agentserver.AgentExecutionResult;
 import de.ser.doxis4.agentserver.UnifiedAgent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -41,7 +42,6 @@ public class EscalationMailLoad extends UnifiedAgent {
             JSONObject mcfg = Utils.getMailConfig();
 
             helper = new ProcessHelper(Utils.session);
-
             projects = Utils.getProjectWorkspaces(helper);
             mailTemplate = null;
 
@@ -969,15 +969,22 @@ public class EscalationMailLoad extends UnifiedAgent {
         }
         log.info("    -> finish ");
     }
-    private void moveCurrentTaskToNext(ITask eventTask) throws Exception{
-        List<IPossibleDecision> decisions = eventTask.findPossibleDecisions();
-        eventTask.setDescriptorValue("Notes","Auto Completed by System (Escalation Raised)");
-        eventTask.commit();
-        for(IPossibleDecision pdecision : decisions){
-            IDecision decision = pdecision.getDecision();
-            eventTask.complete(decision);
-            break;
+    private AgentExecutionResult moveCurrentTaskToNext(ITask eventTask) throws Exception{
+        try{
+            List<IPossibleDecision> decisions = eventTask.findPossibleDecisions();
+            eventTask.setDescriptorValue("Notes","Auto Completed by System (Escalation Raised)");
+            eventTask.commit();
+            for(IPossibleDecision pdecision : decisions){
+                IDecision decision = pdecision.getDecision();
+                eventTask.complete(decision);
+                break;
+            }
+        }catch (Exception e){
+            log.info("Escalation...error:" + e);
+            log.info("Restarting Escalation Agent....");
+            return resultRestart("Restarting Agent for Escalation");
         }
+        return null;
     }
     public String getUserLoginByWB(String wbID){
         String rtrn = "";
