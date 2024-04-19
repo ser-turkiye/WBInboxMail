@@ -50,6 +50,7 @@ public class EscalationMailLoad extends UnifiedAgent {
                 IDocument dtpl = Utils.getTemplateDocument(prjt, Conf.MailTemplates.Reviewer);
                 if(dtpl == null){continue;}
                 mailTemplate = dtpl;
+                break;
             }
 
             if(mailTemplate == null){throw new Exception("Mail template not found.");}
@@ -314,7 +315,8 @@ public class EscalationMailLoad extends UnifiedAgent {
             JSONObject mail = new JSONObject();
 
             mail.put("To", wbMail);
-            mail.put("Subject","Escalation for Reviewer");
+            //mail.put("Subject","Escalation for Reviewer");
+            mail.put("Subject","Escalated Task(s) for Reviewer (" + dcnt + ")");
             mail.put("BodyHTMLFile", mailHtmlPath);
 
             try {
@@ -481,7 +483,8 @@ public class EscalationMailLoad extends UnifiedAgent {
             JSONObject mail = new JSONObject();
 
             mail.put("To", wbMail);
-            mail.put("Subject","Escalation for Reviewer");
+            //mail.put("Subject","Escalation for Reviewer");
+            mail.put("Subject","Escalated Task(s) for Reviewer (" + dcnt + ")");
             mail.put("BodyHTMLFile", mailHtmlPath);
 
             try {
@@ -718,7 +721,8 @@ public class EscalationMailLoad extends UnifiedAgent {
             JSONObject mail = new JSONObject();
 
             mail.put("To", wbMail);
-            mail.put("Subject","Escalation for Consolidator");
+            //mail.put("Subject","Escalation for Consolidator");
+            mail.put("Subject","Escalated Task(s) for Consolidator (" + dcnt + ")");
             mail.put("BodyHTMLFile", mailHtmlPath);
 
             try {
@@ -957,7 +961,8 @@ public class EscalationMailLoad extends UnifiedAgent {
             JSONObject mail = new JSONObject();
 
             mail.put("To", wbMail);
-            mail.put("Subject","Escalation for DCC");
+            //mail.put("Subject","Escalation for DCC");
+            mail.put("Subject","Escalated Task(s) for DCC (" + dcnt + ")");
             mail.put("BodyHTMLFile", mailHtmlPath);
 
             try {
