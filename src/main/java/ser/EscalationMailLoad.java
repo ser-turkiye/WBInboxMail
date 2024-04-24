@@ -100,6 +100,9 @@ public class EscalationMailLoad extends UnifiedAgent {
             tcnt++;
             log.info(" *** subprocess task [" + tcnt + "] : " + task.getDisplayName());
 
+            String tsid = task.getID();
+            log.info(" *** subprocess id [" + tcnt + "] : " + tsid);
+
             String clid = task.getClassID();
             log.info(" *** subprocess class id [" + tcnt + "] : " + clid);
             if(!clid.equals(Conf.ClassIDs.SubReview)){continue;}
@@ -513,23 +516,26 @@ public class EscalationMailLoad extends UnifiedAgent {
             int tcnt = 0;
 
             tcnt++;
-            log.info(" *** subprocess task [" + tcnt + "] : " + task.getDisplayName());
+            log.info(" *** main review process task [" + tcnt + "] : " + task.getDisplayName());
+
+            String tsid = task.getID();
+            log.info(" *** main review process id [" + tcnt + "] : " + tsid);
 
             String clid = task.getClassID();
-            log.info(" *** subprocess class id [" + tcnt + "] : " + clid);
+            log.info(" *** main review process class id [" + tcnt + "] : " + clid);
             if(!clid.equals(Conf.ClassIDs.ReviewMain)){continue;}
 
             IProcessInstance proi = task.getProcessInstance();
             if(proi == null){continue;}
-            log.info(" *** subprocess proi [" + tcnt + "] : " + proi.getDisplayName());
+            log.info(" *** main review process proi [" + tcnt + "] : " + proi.getDisplayName());
 
             IDocument wdoc = (IDocument) proi.getMainInformationObject();
             if(wdoc == null){continue;}
-            log.info(" *** subprocess wdoc [" + tcnt + "] : " + wdoc.getDisplayName());
+            log.info(" *** main review process wdoc [" + tcnt + "] : " + wdoc.getDisplayName());
 
             String prjn = wdoc.getDescriptorValue(Conf.Descriptors.ProjectNo, String.class);
             if(prjn == null || prjn.isEmpty()){continue;}
-            log.info(" *** subprocess prjn [" + tcnt + "] : " + prjn);
+            log.info(" *** main review process prjn [" + tcnt + "] : " + prjn);
 
             IDocument prjCardDoc = getProjectCard(prjn);
             List<String> cnslList = consolidatorList((IInformationObject) task);
@@ -751,23 +757,26 @@ public class EscalationMailLoad extends UnifiedAgent {
             int tcnt = 0;
 
             tcnt++;
-            log.info(" *** subprocess task [" + tcnt + "] : " + task.getDisplayName());
+            log.info(" *** main review process task [" + tcnt + "] : " + task.getDisplayName());
+
+            String tsid = task.getID();
+            log.info(" *** main review process id [" + tcnt + "] : " + tsid);
 
             String clid = task.getClassID();
-            log.info(" *** subprocess class id [" + tcnt + "] : " + clid);
+            log.info(" *** main review process class id [" + tcnt + "] : " + clid);
             if(!clid.equals(Conf.ClassIDs.ReviewMain)){continue;}
 
             IProcessInstance proi = task.getProcessInstance();
             if(proi == null){continue;}
-            log.info(" *** subprocess proi [" + tcnt + "] : " + proi.getDisplayName());
+            log.info(" *** main review process proi [" + tcnt + "] : " + proi.getDisplayName());
 
             IDocument wdoc = (IDocument) proi.getMainInformationObject();
             if(wdoc == null){continue;}
-            log.info(" *** subprocess wdoc [" + tcnt + "] : " + wdoc.getDisplayName());
+            log.info(" *** main review process wdoc [" + tcnt + "] : " + wdoc.getDisplayName());
 
             String prjn = wdoc.getDescriptorValue(Conf.Descriptors.ProjectNo, String.class);
             if(prjn == null || prjn.isEmpty()){continue;}
-            log.info(" *** subprocess prjn [" + tcnt + "] : " + prjn);
+            log.info(" *** main review process prjn [" + tcnt + "] : " + prjn);
 
             IDocument prjCardDoc = getProjectCard(prjn);
             List<String> cnslList = consolidatorList((IInformationObject) task);
