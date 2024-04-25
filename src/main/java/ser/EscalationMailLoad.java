@@ -136,11 +136,20 @@ public class EscalationMailLoad extends UnifiedAgent {
                 tbgn = task.getReadyDate();
             }
 
+            log.info("    -> begin date : " + tbgn + "   -> end date : " + tend);
+
             long durd  = 0L;
             double durh  = 0.0;
             if(tend != null && tbgn != null) {
                 long diff = (tend.getTime() > tbgn.getTime() ? tend.getTime() - tbgn.getTime() : tbgn.getTime() - tend.getTime());
                 durd = TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS);
+
+                long diffSeconds = diff / 1000;
+                long diffMinutes = diff / (60 * 1000);
+                long diffHours = diff / (60 * 60 * 1000);
+
+                log.info("    -> duration : " + durd + "   -> prj duration : " + prjRvwDrtn);
+
                 if(durd<=prjRvwDrtn){continue;}
                 durh = ((TimeUnit.MINUTES.convert(diff, TimeUnit.MILLISECONDS) - (durd * 24 * 60)) * 100 / 60) / 100d;
             }
