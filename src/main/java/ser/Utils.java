@@ -26,8 +26,10 @@ import jakarta.mail.internet.MimeMultipart;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.poi.common.usermodel.HyperlinkType;
+import org.apache.poi.hssf.usermodel.*;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.XSSFRow;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.json.JSONObject;
 
@@ -95,7 +97,7 @@ public class Utils {
         Row sourceRow = worksheet.getRow(sourceRowNum);
 
         if (newRow != null) {
-            worksheet.shiftRows(destinationRowNum, worksheet.getLastRowNum(), 1);
+            //worksheet.shiftRows(destinationRowNum, worksheet.getLastRowNum(), 1);
         } else {
             newRow = worksheet.createRow(destinationRowNum);
         }
@@ -193,19 +195,12 @@ public class Utils {
         }
 
         mrow.setZeroHeight(true);
-        tsht.setColumnHidden(colIx, true);
+        //tsht.setColumnHidden(colIx, true);
 
         FileOutputStream tost = new FileOutputStream(spth);
         twrb.write(tost);
         tost.close();
 
-    }
-    public static boolean hasDescriptor_old01(IInformationObject infObj, String dscn) throws Exception {
-        IValueDescriptor[] vds = infObj.getDescriptorList();
-        for(IValueDescriptor vd : vds){
-            if(vd.getName().equals(dscn)){return true;}
-        }
-        return false;
     }
     public static String updateCell(String str, JSONObject bookmarks){
         StringBuffer rtr1 = new StringBuffer();
