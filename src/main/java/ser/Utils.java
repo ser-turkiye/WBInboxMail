@@ -27,6 +27,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.poi.common.usermodel.HyperlinkType;
 import org.apache.poi.hssf.usermodel.*;
+import org.apache.poi.openxml4j.util.ZipSecureFile;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFRow;
@@ -164,7 +165,7 @@ public class Utils {
         return newRow;
     }
     public static void loadTableRows(String spth, Integer shtIx, String prfx, Integer colIx, Integer scpy) throws IOException {
-
+        ZipSecureFile.setMinInflateRatio(-1.0d);
         FileInputStream tist = new FileInputStream(spth);
         XSSFWorkbook twrb = new XSSFWorkbook(tist);
 
@@ -244,7 +245,7 @@ public class Utils {
         return rtrn;
     }
     public static void saveWBInboxExcel(String tpth, Integer shtIx,JSONObject pbks) throws IOException {
-
+        ZipSecureFile.setMinInflateRatio(-1.0d);
         FileInputStream tist = new FileInputStream(tpth);
         XSSFWorkbook twrb = new XSSFWorkbook(tist);
 
@@ -553,6 +554,24 @@ public class Utils {
         rtrn = rtrn.replace("ï»¿", "");
         rtrn = rtrn.replace("ï»¿ï»¿", "");
         return rtrn;
+    }
+    static String getUserIDfromWorkbasket(String wbID) throws Exception {
+        log.info("Getting User Login from workbasket");
+        IStringMatrix workbaskets = server.getStringMatrixByID("Workbaskets", session);
+        if (workbaskets == null) throw new Exception("Workbaskets Global Value List not found");
+        List<List<String>> rawTable = workbaskets.getRawRows();
+        return getDatafromTable(wbID,rawTable);
+    }
+    static String getDatafromTable(String key, List<List<String>> rawTable) {
+        for(List<String> list : rawTable) {
+            if(list.contains(key)) {
+                //we found the user
+                //return first column as workbasketID
+                log.info("workbasket name for user ID: " + key + " is " + list.get(1));
+                return list.get(1);
+            }
+        }
+        return null;
     }
     public static void sendHTMLMailOLD(JSONObject mcfg, JSONObject pars) throws Exception {
         String host = mcfg.getString("host");

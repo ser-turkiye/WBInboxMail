@@ -11,6 +11,7 @@ import org.json.JSONObject;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -58,8 +59,11 @@ public class WBInboxMailLoad extends UnifiedAgent {
             List<IWorkbasket> wbs = Utils.bpm.getWorkbaskets();
             for (IWorkbasket wb : wbs){
                 IWorkbasket swb = Utils.bpm.getWorkbasket(wb.getID());
+                String dUserLogin = Utils.getUserIDfromWorkbasket(wb.getID());
+                IUser user = getDocumentServer().getUserByLoginName(getSes(),dUserLogin);
+                if(user!=null && user.getLicenseType() == LicenseType.TECHNICAL_USER) continue;
+                if(Objects.equals(swb.getName(), "AgentService")){continue;}
                 runWorkbasket(swb, mcfg, mailTemplate);
-
             }
 
             log.info("Tested.");
